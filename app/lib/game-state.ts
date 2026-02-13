@@ -33,19 +33,15 @@ export type HistoryEntry = {
 
 export type CivilizationId = "rome" | "india" | "egypt";
 
-/** Full-quality images for the actual game (initial/base image). */
+/** Compressed images for the initial game state and the civilization picker (faster load). */
 export const CIVILIZATION_IMAGE_PATHS: Record<CivilizationId, { jpg: string; png: string }> = {
-  rome: { jpg: "/civilizations/rome.jpg", png: "/civilizations/rome.png" },
-  india: { jpg: "/civilizations/india.jpg", png: "/civilizations/india.png" },
-  egypt: { jpg: "/civilizations/egypt.jpg", png: "/civilizations/egypt.png" },
-};
-
-/** Compressed images for the civilization picker carousel only. */
-export const CIVILIZATION_PICKER_IMAGE_PATHS: Record<CivilizationId, { jpg: string; png: string }> = {
   rome: { jpg: "/civilizations/rome.jpg", png: "/civilizations/rome-compressed.png" },
   india: { jpg: "/civilizations/india.jpg", png: "/civilizations/india-compressed.png" },
   egypt: { jpg: "/civilizations/egypt.jpg", png: "/civilizations/egypt-compressed.png" },
 };
+
+/** Alias for the picker carousel (same compressed images as initial state). */
+export const CIVILIZATION_PICKER_IMAGE_PATHS = CIVILIZATION_IMAGE_PATHS;
 
 export type GameState = {
   civilization: CivilizationId;
