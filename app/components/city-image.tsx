@@ -45,7 +45,7 @@ export function CityImage({ image, previousImage, mimeType, dimmed, loading }: C
   const prevSrc = previousImage ? `data:${mimeType};base64,${previousImage}` : null;
 
   return (
-    <div className={`absolute inset-0 max-md:h-[80vh] max-md:bottom-auto overflow-hidden transition-all duration-500 ${dimmed ? "brightness-50" : ""}`}>
+    <div className={`absolute inset-0 overflow-hidden transition-all duration-500 ${dimmed ? "brightness-50" : ""}`}>
       <motion.div
         className="absolute -inset-4"
         animate={loading ? {

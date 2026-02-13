@@ -372,6 +372,17 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
   const displayImage = isScrubbing ? scrubEntry.image : gameState.currentImage;
   const displayMimeType = isScrubbing ? scrubEntry.imageMimeType : gameState.currentImageMimeType;
 
+  const statsBarProps = displayImage
+    ? {
+        year: isScrubbing ? scrubEntry.year : gameState.year,
+        stats: gameState.stats,
+        history: gameState.history,
+        onScrub: setScrubEntry,
+      }
+    : undefined;
+
+  const drawerOrOutcomeOpen = showDrawer || showOutcome;
+
   return (
     <div className="h-screen w-screen overflow-hidden bg-black relative">
       <CityImage
@@ -382,13 +393,14 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
       />
 
       {displayImage && (
-        <StatsBar
-          year={isScrubbing ? scrubEntry.year : gameState.year}
-          stats={gameState.stats}
-          history={gameState.history}
-          onScrub={setScrubEntry}
-          hideOnMobileWhenLoading={showLoading}
-        />
+        <div className={drawerOrOutcomeOpen ? "max-md:hidden" : ""}>
+          <StatsBar
+            year={isScrubbing ? scrubEntry.year : gameState.year}
+            stats={gameState.stats}
+            history={gameState.history}
+            onScrub={setScrubEntry}
+          />
+        </div>
       )}
 
       <EventDrawer
@@ -396,6 +408,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
         visible={showDrawer}
         onChoose={handleChoice}
         disabled={choosing}
+        statsBarProps={statsBarProps}
       />
 
       <LoadingOverlay visible={showLoading} messages={loadingMessages} />
@@ -405,6 +418,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
         visible={showOutcome}
         onContinue={handleNextTurn}
         statDeltas={gameState.lastChoiceStatDeltas ?? undefined}
+        statsBarProps={statsBarProps}
       />
 
       {gameState.gameOver && (
@@ -446,9 +460,9 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
       {gameState.currentImage && !gameState.gameOver && (
         <Button
           variant="outline"
-          size="xs"
+          size="sm"
           onClick={goHome}
-          className="absolute top-4 right-4 z-20 min-h-[44px] min-w-[44px] max-md:min-h-[44px] max-md:min-w-[44px] md:min-h-0 md:min-w-0 bg-black/30 backdrop-blur-xl border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-black/50"
+          className="absolute top-4 right-4 z-20 bg-black/30 backdrop-blur-xl border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-black/50"
         >
           Home
         </Button>

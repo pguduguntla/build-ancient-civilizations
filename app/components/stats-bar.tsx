@@ -9,8 +9,8 @@ type StatsBarProps = {
   stats: Stats;
   history: HistoryEntry[];
   onScrub: (entry: HistoryEntry | null) => void;
-  /** When true, bar is hidden on mobile (max-md) to avoid conflict with loading overlay */
-  hideOnMobileWhenLoading?: boolean;
+  /** When true, render inline (e.g. inside a drawer) instead of absolute bottom */
+  embedded?: boolean;
 };
 
 function ResourceDots({ value, max = 5 }: { value: number; max?: number }) {
@@ -97,7 +97,7 @@ function StatsPill({ year, stats }: { year: number; stats: Stats }) {
   );
 }
 
-export function StatsBar({ year, stats, history, onScrub, hideOnMobileWhenLoading }: StatsBarProps) {
+export function StatsBar({ year, stats, history, onScrub, embedded }: StatsBarProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -165,7 +165,13 @@ export function StatsBar({ year, stats, history, onScrub, hideOnMobileWhenLoadin
   }, [isDragging, onScrub]);
 
   return (
-    <div className={`absolute bottom-0 left-0 right-0 z-10 px-4 py-3 ${hideOnMobileWhenLoading ? "max-md:hidden" : ""}`}>
+    <div
+      className={
+        embedded
+          ? "w-full px-4 py-3 border-t border-white/[0.08] shrink-0"
+          : "absolute bottom-0 left-0 right-0 z-10 px-4 py-3"
+      }
+    >
       <div className="flex items-end justify-end gap-3">
         {/* Scrubber - left of stats */}
         {hasHistory && (

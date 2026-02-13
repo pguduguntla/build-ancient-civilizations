@@ -107,7 +107,7 @@ export function LoadingOverlay({ visible, messages }: LoadingOverlayProps) {
       />
 
       {/* Content pinned to bottom-left */}
-      <div className="absolute bottom-10 left-0 max-w-sm px-5 pb-4 flex items-center gap-3">
+      <div className="absolute bottom-0 left-0 max-w-sm px-4 pb-4 flex items-center gap-3">
         <div className="w-4 h-4 border-[1.5px] border-white/10 border-t-white/60 rounded-full animate-spin shrink-0" />
         <TextEffect
           key={`${state.index}-${text}`}

@@ -102,7 +102,7 @@ export default function Home() {
         }}
       />
 
-      <div className="relative z-10 flex flex-col items-center px-5 py-12 sm:py-16 max-w-xl max-md:max-w-none mx-auto w-full">
+      <div className="relative z-10 flex flex-col items-center max-md:items-stretch px-5 py-12 sm:py-16 max-w-xl max-md:max-w-none mx-auto w-full">
         <InView
           once
           variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
@@ -177,32 +177,35 @@ export default function Home() {
           </div>
         </InView>
 
-        <InView
-          once
-          as="div"
-          variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
-          transition={{ duration: 0.4 }}
-          viewOptions={{ amount: 0.5 }}
-        >
-          <div className="mt-6 flex justify-center max-md:w-full">
-            <Button
-              size="lg"
-              onClick={handleNewGame}
-              className="w-full sm:w-auto sm:min-w-[200px] bg-white text-black hover:bg-white/90 font-medium text-base px-8 py-6"
-            >
-              New Game
-            </Button>
-          </div>
-        </InView>
-
-        {recentGames.length > 0 && (
+        <div className="w-full">
           <InView
             once
-            as="section"
-            variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
-            transition={{ duration: 0.5, delay: 0.15 }}
-            viewOptions={{ amount: 0.2 }}
+            as="div"
+            variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
+            transition={{ duration: 0.4 }}
+            viewOptions={{ amount: 0.5 }}
           >
+            <div className="mt-6 w-full">
+              <Button
+                size="lg"
+                onClick={handleNewGame}
+                className="w-full sm:w-auto sm:min-w-[200px] bg-white text-black hover:bg-white/90 font-medium text-base px-8 py-6 rounded-xl"
+              >
+                New Game
+              </Button>
+            </div>
+          </InView>
+        </div>
+
+        {recentGames.length > 0 && (
+          <div className="w-full">
+            <InView
+              once
+              as="section"
+              variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.5, delay: 0.15 }}
+              viewOptions={{ amount: 0.2 }}
+            >
             <div className="w-full mt-14 sm:mt-16">
             <p className="text-white/50 text-[13px] font-medium tracking-wide uppercase mb-3 px-1">
               Recent games
@@ -238,6 +241,7 @@ export default function Home() {
             </ul>
             </div>
           </InView>
+          </div>
         )}
       </div>
     </div>
