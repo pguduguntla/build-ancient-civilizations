@@ -185,7 +185,7 @@ export default function Home() {
             transition={{ duration: 0.4 }}
             viewOptions={{ amount: 0.5 }}
           >
-            <div className="mt-6 w-full">
+            <div className="mt-6 w-full flex justify-center">
               <Button
                 size="lg"
                 onClick={handleNewGame}
