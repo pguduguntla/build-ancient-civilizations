@@ -5,32 +5,52 @@ import { motion } from "motion/react";
 import { TextEffect } from "@/components/motion-primitives/text-effect";
 import GlareHover from "@/components/GlareHover";
 
-const LOADING_MESSAGES = [
+const FALLBACK_MESSAGES = [
   "Your city evolves",
   "Time passes",
   "The world changes",
   "History unfolds",
-  "Your people act on your decision",
+  "Life goes on",
 ];
 
-type State = { index: number; trigger: boolean };
-type Action = { type: "cycle_out" } | { type: "cycle_in" } | { type: "reset" };
+type State = { index: number; trigger: boolean; pool: string[] };
+type Action =
+  | { type: "cycle_out" }
+  | { type: "cycle_in" }
+  | { type: "reset" }
+  | { type: "set_pool"; pool: string[] };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "cycle_out":
       return { ...state, trigger: false };
     case "cycle_in":
-      return { index: (state.index + 1) % LOADING_MESSAGES.length, trigger: true };
+      return { ...state, index: (state.index + 1) % state.pool.length, trigger: true };
     case "reset":
-      return { index: 0, trigger: true };
+      return { ...state, index: 0, trigger: true };
+    case "set_pool":
+      return { ...state, pool: action.pool };
     default:
       return state;
   }
 }
 
-export function LoadingOverlay({ visible }: { visible: boolean }) {
-  const [state, dispatch] = useReducer(reducer, { index: 0, trigger: true });
+type LoadingOverlayProps = {
+  visible: boolean;
+  messages?: string[] | null;
+};
+
+export function LoadingOverlay({ visible, messages }: LoadingOverlayProps) {
+  const [state, dispatch] = useReducer(reducer, {
+    index: 0,
+    trigger: true,
+    pool: FALLBACK_MESSAGES,
+  });
+
+  const newPool = messages && messages.length > 0 ? messages : FALLBACK_MESSAGES;
+  if (newPool[0] !== state.pool[0]) {
+    dispatch({ type: "set_pool", pool: newPool });
+  }
 
   const cycleMessage = useCallback(() => {
     dispatch({ type: "cycle_out" });
@@ -45,6 +65,8 @@ export function LoadingOverlay({ visible }: { visible: boolean }) {
   }, [visible, cycleMessage]);
 
   if (!visible) return null;
+
+  const text = state.pool[state.index % state.pool.length];
 
   return (
     <div className="absolute inset-0 z-30 pointer-events-none">
@@ -88,7 +110,7 @@ export function LoadingOverlay({ visible }: { visible: boolean }) {
       <div className="absolute bottom-10 left-0 max-w-sm px-5 pb-4 flex items-center gap-3">
         <div className="w-4 h-4 border-[1.5px] border-white/10 border-t-white/60 rounded-full animate-spin shrink-0" />
         <TextEffect
-          key={state.index}
+          key={`${state.index}-${text}`}
           preset="fade-in-blur"
           speedReveal={3}
           speedSegment={0.8}
@@ -97,7 +119,7 @@ export function LoadingOverlay({ visible }: { visible: boolean }) {
           as="p"
           className="text-white/50 text-[15px] font-medium"
         >
-          {LOADING_MESSAGES[state.index]}
+          {text}
         </TextEffect>
       </div>
     </div>

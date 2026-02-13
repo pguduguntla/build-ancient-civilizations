@@ -26,6 +26,26 @@ import {
 
 const MAX_TURNS = 25;
 
+async function fetchLoadingMessages(
+  phase: "processing" | "loading",
+  eventTitle?: string,
+  choiceLabel?: string,
+  year?: number,
+): Promise<string[] | null> {
+  try {
+    const res = await fetch("/api/game/loading-messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phase, eventTitle, choiceLabel, year }),
+    });
+    if (!res.ok) return null;
+    const { messages } = await res.json();
+    return messages;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchEvent(state: GameState): Promise<GameEvent> {
   const res = await fetch("/api/game/generate-event", {
     method: "POST",
@@ -66,6 +86,7 @@ export default function Home() {
   const [initialized, setInitialized] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [scrubEntry, setScrubEntry] = useState<HistoryEntry | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState<string[] | null>(null);
   const initRef = useRef(false);
 
   // Load or create game state
@@ -178,6 +199,15 @@ export default function Home() {
         phase: "processing",
       };
       setGameState(processingState);
+      setLoadingMessages(null);
+
+      // Fetch contextual loading messages in parallel (fire and forget)
+      fetchLoadingMessages(
+        "processing",
+        gameState.currentEvent?.title,
+        choice.label,
+        gameState.year,
+      ).then((msgs) => { if (msgs) setLoadingMessages(msgs); });
 
       // Check game over
       if (newTurn >= MAX_TURNS || newStats.population <= 0) {
@@ -234,6 +264,12 @@ export default function Home() {
 
     const loadingState: GameState = { ...gameState, phase: "loading" };
     setGameState(loadingState);
+
+    // Fetch generic loading messages in parallel
+    const lastHistory = gameState.history[gameState.history.length - 1];
+    setLoadingMessages(null);
+    fetchLoadingMessages("loading", lastHistory?.eventTitle, lastHistory?.choiceLabel, gameState.year)
+      .then((msgs) => { if (msgs) setLoadingMessages(msgs); });
 
     try {
       const event = await fetchEvent(gameState);
@@ -323,7 +359,7 @@ export default function Home() {
       />
 
       {/* Loading Overlay */}
-      <LoadingOverlay visible={showLoading} />
+      <LoadingOverlay visible={showLoading} messages={loadingMessages} />
 
       {/* Result Card (outcome of player's choice) */}
       <ResultCard
