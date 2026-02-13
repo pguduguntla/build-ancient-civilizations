@@ -102,7 +102,7 @@ export default function Home() {
         }}
       />
 
-      <div className="relative z-10 flex flex-col items-center px-6 py-12 sm:py-16 max-w-xl mx-auto w-full">
+      <div className="relative z-10 flex flex-col items-center px-5 py-12 sm:py-16 max-w-xl max-md:max-w-none mx-auto w-full">
         <InView
           once
           variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
@@ -184,11 +184,11 @@ export default function Home() {
           transition={{ duration: 0.4 }}
           viewOptions={{ amount: 0.5 }}
         >
-          <div className="mt-6 flex justify-center">
+          <div className="mt-6 flex justify-center max-md:w-full">
             <Button
               size="lg"
               onClick={handleNewGame}
-              className="min-w-[200px] bg-white text-black hover:bg-white/90 font-medium text-base px-8 py-6"
+              className="w-full sm:w-auto sm:min-w-[200px] bg-white text-black hover:bg-white/90 font-medium text-base px-8 py-6"
             >
               New Game
             </Button>

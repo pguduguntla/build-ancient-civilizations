@@ -40,6 +40,17 @@ const pickerCss = `
   .civilization-picker-swiper .swiper-slide-active {
     box-shadow: 0 12px 48px rgba(0,0,0,0.5);
   }
+  @media (max-width: 767px) {
+    .civilization-picker-swiper {
+      height: 300px;
+      padding: 16px 0 40px;
+    }
+    .civilization-picker-slide-image {
+      flex: 1 1 auto;
+      min-height: 0;
+      aspect-ratio: 4 / 3;
+    }
+  }
 `;
 
 const resultCardButtonClass =
@@ -139,7 +150,7 @@ export function CivilizationPicker({
                 <div className="flex flex-col w-full h-full">
                   <div
                     className={cn(
-                      "w-full flex-1 min-h-[240px] rounded-2xl relative overflow-hidden"
+                      "civilization-picker-slide-image w-full flex-1 min-h-[240px] rounded-2xl relative overflow-hidden"
                     )}
                     style={{ background: civ.gradient }}
                   >

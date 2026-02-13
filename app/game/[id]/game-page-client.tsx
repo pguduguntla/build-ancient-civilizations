@@ -387,6 +387,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
           stats={gameState.stats}
           history={gameState.history}
           onScrub={setScrubEntry}
+          hideOnMobileWhenLoading={showLoading}
         />
       )}
 
@@ -435,8 +436,8 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
       )}
 
       {gameState.phase === "idle" && !gameState.gameOver && gameState.currentImage && (
-        <div className="absolute bottom-16 left-0 right-0 z-20 flex justify-center">
-          <Button onClick={handleNextTurn} size="sm">
+        <div className="absolute bottom-16 left-4 right-4 z-20 flex justify-center md:left-0 md:right-0">
+          <Button onClick={handleNextTurn} size="sm" className="w-full max-md:w-full md:w-auto">
             Continue
           </Button>
         </div>
@@ -447,7 +448,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
           variant="outline"
           size="xs"
           onClick={goHome}
-          className="absolute top-4 right-4 z-20 bg-black/30 backdrop-blur-xl border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-black/50"
+          className="absolute top-4 right-4 z-20 min-h-[44px] min-w-[44px] max-md:min-h-[44px] max-md:min-w-[44px] md:min-h-0 md:min-w-0 bg-black/30 backdrop-blur-xl border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-black/50"
         >
           Home
         </Button>

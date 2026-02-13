@@ -23,13 +23,22 @@ export function EventDrawer({ event, visible, onChoose, disabled }: EventDrawerP
         visible ? "opacity-100" : "opacity-0"
       }`}
     >
-      {/* Diagonal gradient */}
+      {/* Diagonal gradient (desktop) */}
       <div
         className="absolute inset-0"
         style={{
           background: "linear-gradient(to top right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 25%, rgba(0,0,0,0.15) 50%, transparent 65%)",
         }}
       />
+      {/* Strong bottom gradient on mobile: dark at bottom (under cards), fading to transparent toward top */}
+      {visible && (
+        <div
+          className="absolute inset-0 md:hidden pointer-events-none"
+          style={{
+            background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.25) 70%, transparent 100%)",
+          }}
+        />
+      )}
 
       {/* Content pinned to bottom-left */}
       <div className="absolute bottom-10 left-0 max-w-sm px-5 pb-4 pointer-events-auto">
