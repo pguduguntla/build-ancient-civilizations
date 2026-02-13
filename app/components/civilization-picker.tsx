@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CivilizationId } from "@/app/lib/game-state";
-import { CIVILIZATION_IMAGE_PATHS } from "@/app/lib/game-state";
+import { CIVILIZATION_PICKER_IMAGE_PATHS } from "@/app/lib/game-state";
 
 const CIVILIZATIONS: { id: CivilizationId; label: string; subtitle: string; gradient: string }[] = [
   { id: "rome", label: "Ancient Rome", subtitle: "Senate, legions & empire", gradient: "linear-gradient(135deg, #8b4513 0%, #cd853f 50%, #daa520 100%)" },
@@ -144,7 +144,7 @@ export function CivilizationPicker({
           modules={[EffectCoverflow]}
         >
           {CIVILIZATIONS.map((civ) => {
-            const paths = CIVILIZATION_IMAGE_PATHS[civ.id];
+            const paths = CIVILIZATION_PICKER_IMAGE_PATHS[civ.id];
             return (
               <SwiperSlide key={civ.id}>
                 <div className="flex flex-col w-full h-full">
