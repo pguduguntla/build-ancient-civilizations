@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   // Use Nano Banana Pro (google/gemini-3-pro-image) which can both
   // chat AND generate images as a multimodal LLM
   const result = streamText({
-    model: "google/gemini-3-pro-image",
+    model: "google/gemini-2.5-flash-image",
     system: `You are a helpful assistant that can chat and generate images. 
 When the user asks you to create, draw, or generate an image, do so directly.
 Be conversational and helpful.`,

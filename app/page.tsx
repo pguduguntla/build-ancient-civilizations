@@ -1,303 +1,386 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { CityImage } from "@/app/components/city-image";
+import { StatsBar } from "@/app/components/stats-bar";
+import { EventDrawer } from "@/app/components/event-drawer";
+import { LoadingOverlay } from "@/app/components/loading-overlay";
 
-// Type for file with preview URL
-type FileWithPreview = {
-  file: File;
-  previewUrl: string;
-};
+import { ResultCard } from "@/app/components/result-card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  type GameState,
+  type Choice,
+  type GameEvent,
+  type HistoryEntry,
+  createInitialState,
+  saveGameState,
+  loadGameState,
+  clearGameState,
+  applyChoiceEffects,
+  buildCityDescription,
+  formatYear,
+} from "@/app/lib/game-state";
 
-// Convert uploaded files to data URLs for sending with messages
-async function convertFilesToDataURLs(
-  files: FileWithPreview[]
-): Promise<{ type: "file"; filename: string; mediaType: string; url: string }[]> {
-  return Promise.all(
-    files.map(
-      ({ file }) =>
-        new Promise<{
-          type: "file";
-          filename: string;
-          mediaType: string;
-          url: string;
-        }>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve({
-              type: "file",
-              filename: file.name,
-              mediaType: file.type,
-              url: reader.result as string,
-            });
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        })
-    )
-  );
+const MAX_TURNS = 25;
+
+async function fetchEvent(state: GameState): Promise<GameEvent> {
+  const res = await fetch("/api/game/generate-event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      turn: state.turn,
+      year: state.year,
+      stats: state.stats,
+      history: state.history,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to generate event");
+  return res.json();
+}
+
+async function fetchImage(
+  prompt: string,
+  previousImage?: string | null,
+  previousImageMimeType?: string,
+  population?: number
+): Promise<{ image: string; mimeType: string }> {
+  const res = await fetch("/api/game/generate-image", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt,
+      previousImage: previousImage || undefined,
+      previousImageMimeType,
+      population,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to generate image");
+  return res.json();
 }
 
 export default function Home() {
-  const [input, setInput] = useState("");
-  const [filesWithPreview, setFilesWithPreview] = useState<FileWithPreview[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { messages, sendMessage, status } = useChat();
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [initialized, setInitialized] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [scrubEntry, setScrubEntry] = useState<HistoryEntry | null>(null);
+  const initRef = useRef(false);
 
-  // Cleanup blob URLs on unmount
+  // Load or create game state
   useEffect(() => {
-    return () => {
-      filesWithPreview.forEach(({ previewUrl }) => URL.revokeObjectURL(previewUrl));
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (initRef.current) return;
+    initRef.current = true;
+
+    const saved = loadGameState();
+    if (saved && saved.currentImage) {
+      // Resume from saved state - show the event or go idle
+      if (saved.phase === "processing" || saved.phase === "loading") {
+        saved.phase = "idle";
+      }
+      setGameState(saved);
+      setInitialized(true);
+    } else {
+      // New game
+      const initial = createInitialState();
+      setGameState(initial);
+      setInitialized(true);
+    }
   }, []);
 
-  const isLoading = status === "streaming" || status === "submitted";
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLoading) return;
-    
-    // Need either text or files to send
-    const hasText = input.trim().length > 0;
-    const hasFiles = filesWithPreview.length > 0;
-    if (!hasText && !hasFiles) return;
-
-    // Convert files to data URLs
-    const fileParts = hasFiles ? await convertFilesToDataURLs(filesWithPreview) : [];
-
-    // Build message parts
-    const parts: ({ type: "text"; text: string } | { type: "file"; filename: string; mediaType: string; url: string })[] = [];
-    
-    if (hasText) {
-      parts.push({ type: "text", text: input });
+  // Start the game once initialized with a fresh state
+  useEffect(() => {
+    if (!initialized || !gameState) return;
+    if (gameState.turn === 0 && !gameState.currentImage && gameState.phase === "loading") {
+      startNewGame();
     }
-    parts.push(...fileParts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized]);
 
-    sendMessage({ role: "user", parts });
+  const startNewGame = useCallback(async () => {
+    const state = createInitialState();
+    setGameState(state);
 
-    // Cleanup preview URLs and reset form
-    filesWithPreview.forEach(({ previewUrl }) => URL.revokeObjectURL(previewUrl));
-    setInput("");
-    setFilesWithPreview([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    try {
+      // Generate initial image and first event in parallel
+      const [imageResult, event] = await Promise.all([
+        fetchImage(buildCityDescription(state), null, undefined, state.stats.population),
+        fetchEvent(state),
+      ]);
+
+      let eventImage = imageResult;
+      if (event.visualChange) {
+        try {
+          eventImage = await fetchImage(
+            event.visualChange,
+            imageResult.image,
+            imageResult.mimeType,
+            state.stats.population
+          );
+        } catch {
+          // Fall back to the initial image if event image fails
+        }
+      }
+
+      const newState: GameState = {
+        ...state,
+        currentImage: eventImage.image,
+        previousImage: imageResult.image !== eventImage.image ? imageResult.image : null,
+        currentImageMimeType: eventImage.mimeType,
+        currentEvent: event,
+        phase: "event",
+      };
+      setGameState(newState);
+      saveGameState(newState);
+    } catch (error) {
+      console.error("Failed to start game:", error);
+      try {
+        const event = await fetchEvent(state);
+        const newState: GameState = {
+          ...state,
+          currentEvent: event,
+          phase: "event",
+        };
+        setGameState(newState);
+        saveGameState(newState);
+      } catch {
+        console.error("Failed to start game completely");
+      }
     }
-  };
+  }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    const newFilesWithPreview = Array.from(files).map((file) => ({
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
-    setFilesWithPreview(newFilesWithPreview);
-  };
-  
-  // Check if file type is browser-displayable
-  const isDisplayableImage = (mimeType: string) => {
-    const supported = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/svg+xml"];
-    return supported.includes(mimeType.toLowerCase());
-  };
+  const handleChoice = useCallback(
+    async (choice: Choice) => {
+      if (!gameState || choosing) return;
+      setChoosing(true);
 
-  const handleRemoveFile = (index: number) => {
-    // Revoke the URL being removed
-    URL.revokeObjectURL(filesWithPreview[index].previewUrl);
-    
-    setFilesWithPreview((prev) => prev.filter((_, i) => i !== index));
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      const newStats = applyChoiceEffects(gameState.stats, choice.effects);
+      const newYear = gameState.year + (gameState.currentEvent?.yearAdvance ?? 5);
+      const newTurn = gameState.turn + 1;
+
+      const historyEntry: HistoryEntry = {
+        turn: gameState.turn,
+        year: gameState.year,
+        eventTitle: gameState.currentEvent?.title ?? "",
+        choiceLabel: choice.label,
+        image: gameState.currentImage,
+        imageMimeType: gameState.currentImageMimeType,
+      };
+
+      const processingState: GameState = {
+        ...gameState,
+        stats: newStats,
+        year: newYear,
+        turn: newTurn,
+        history: [...gameState.history, historyEntry],
+        currentEvent: null,
+        phase: "processing",
+      };
+      setGameState(processingState);
+
+      // Check game over
+      if (newTurn >= MAX_TURNS || newStats.population <= 0) {
+        const gameOverState: GameState = {
+          ...processingState,
+          phase: "idle",
+          gameOver: true,
+        };
+        setGameState(gameOverState);
+        saveGameState(gameOverState);
+        setChoosing(false);
+        return;
+      }
+
+      try {
+        const choiceVisualPrompt = choice.visualChange || buildCityDescription(processingState, choice.label);
+        const choiceImageResult = await fetchImage(
+          choiceVisualPrompt,
+          gameState.currentImage,
+          gameState.currentImageMimeType,
+          newStats.population
+        );
+
+        // Go to outcome phase so the player sees what happened
+        const outcomeState: GameState = {
+          ...processingState,
+          previousImage: gameState.currentImage,
+          currentImage: choiceImageResult.image,
+          currentImageMimeType: choiceImageResult.mimeType,
+          outcomeText: choice.outcome || `You chose: ${choice.label}`,
+          phase: "outcome",
+        };
+        setGameState(outcomeState);
+        saveGameState(outcomeState);
+      } catch (error) {
+        console.error("Error processing choice:", error);
+        const failState: GameState = {
+          ...processingState,
+          outcomeText: choice.outcome || `You chose: ${choice.label}`,
+          phase: "outcome",
+        };
+        setGameState(failState);
+        saveGameState(failState);
+      } finally {
+        setChoosing(false);
+      }
+    },
+    [gameState, choosing]
+  );
+
+  const handleNextTurn = useCallback(async () => {
+    if (!gameState || choosing) return;
+    setChoosing(true);
+
+    const loadingState: GameState = { ...gameState, phase: "loading" };
+    setGameState(loadingState);
+
+    try {
+      const event = await fetchEvent(gameState);
+
+      // Generate the event impact image
+      let eventImage: { image: string; mimeType: string } | null = null;
+      if (event.visualChange && gameState.currentImage) {
+        try {
+          eventImage = await fetchImage(
+            event.visualChange,
+            gameState.currentImage,
+            gameState.currentImageMimeType,
+            gameState.stats.population
+          );
+        } catch {
+          // Fall back to current image
+        }
+      }
+
+      const newState: GameState = {
+        ...gameState,
+        previousImage: eventImage ? gameState.currentImage : null,
+        currentImage: eventImage?.image ?? gameState.currentImage,
+        currentImageMimeType: eventImage?.mimeType ?? gameState.currentImageMimeType,
+        currentEvent: event,
+        phase: "event",
+      };
+      setGameState(newState);
+      saveGameState(newState);
+    } catch {
+      setGameState({ ...gameState, phase: "idle" });
+    } finally {
+      setChoosing(false);
     }
-  };
+  }, [gameState, choosing]);
+
+  const handleNewGame = useCallback(() => {
+    clearGameState();
+    initRef.current = false;
+    const initial = createInitialState();
+    setGameState(initial);
+    startNewGame();
+  }, [startNewGame]);
+
+  if (!gameState) {
+    return (
+      <div className="h-screen bg-black flex items-center justify-center">
+        <div className="w-5 h-5 border-[1.5px] border-white/10 border-t-white/60 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const isScrubbing = scrubEntry !== null;
+  const showDrawer = !isScrubbing && gameState.phase === "event" && gameState.currentEvent != null;
+  const showLoading = !isScrubbing && (gameState.phase === "loading" || gameState.phase === "processing");
+  const showOutcome = !isScrubbing && gameState.phase === "outcome" && gameState.outcomeText != null;
+
+  const displayImage = isScrubbing ? scrubEntry.image : gameState.currentImage;
+  const displayMimeType = isScrubbing ? scrubEntry.imageMimeType : gameState.currentImageMimeType;
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950">
-      {/* Header */}
-      <header className="p-4 border-b border-zinc-800">
-        <h1 className="text-xl font-semibold text-white">Dream Home Designer</h1>
-        <p className="text-sm text-zinc-500">Chat with AI to design your dream home</p>
-      </header>
+    <div className="h-screen w-screen overflow-hidden bg-black relative">
+      {/* City Image */}
+      <CityImage
+        image={displayImage}
+        previousImage={isScrubbing ? null : gameState.previousImage}
+        mimeType={displayMimeType}
+        loading={showLoading}
+      />
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center text-zinc-500 mt-20">
-            <p>Start a conversation!</p>
-            <p className="text-sm mt-2">Try: &quot;Generate an image of a modern minimalist house&quot;</p>
-            <p className="text-sm mt-1">Or upload an image and ask questions about it!</p>
-          </div>
-        )}
+      {/* Stats Bar + Scrubber */}
+      {displayImage && (
+        <StatsBar
+          year={isScrubbing ? scrubEntry.year : gameState.year}
+          stats={gameState.stats}
+          history={gameState.history}
+          onScrub={setScrubEntry}
+        />
+      )}
 
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                message.role === "user"
-                  ? "bg-white text-black"
-                  : "bg-zinc-800 text-white"
-              }`}
-            >
-              {message.parts.map((part, i) => {
-                if (part.type === "text" && part.text) {
-                  return (
-                    <p key={i} className="whitespace-pre-wrap">
-                      {part.text}
-                    </p>
-                  );
-                }
-                
-                // Handle file parts (images)
-                if (part.type === "file") {
-                  const mediaType = part.mediaType || (part as Record<string, unknown>).mimeType as string;
-                  const url = part.url || (part as Record<string, unknown>).data as string;
-                  const filename = (part as Record<string, unknown>).filename as string | undefined;
-                  
-                  if (mediaType?.startsWith("image/") && url) {
-                    // Check if it's a browser-supported image format
-                    const supportedFormats = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/svg+xml"];
-                    const isSupported = supportedFormats.some(f => mediaType.toLowerCase().startsWith(f.split("/")[1]) || mediaType.toLowerCase() === f);
-                    
-                    if (!isSupported) {
-                      // Show placeholder for unsupported formats like HEIC
-                      return (
-                        <div key={i} className="flex items-center gap-2 mt-2 p-3 bg-zinc-100 dark:bg-zinc-700 rounded-lg">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                            <circle cx="9" cy="9" r="2"/>
-                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-                          </svg>
-                          <span className="text-sm text-zinc-600 dark:text-zinc-300">
-                            {filename || "Image"} ({mediaType.split("/")[1].toUpperCase()})
-                          </span>
-                        </div>
-                      );
-                    }
-                    
-                    // If url is base64 without data prefix, add it
-                    const imgSrc = url.startsWith("data:") ? url : `data:${mediaType};base64,${url}`;
-                    return (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={i}
-                        src={imgSrc}
-                        alt={filename || "Image"}
-                        className="rounded-lg max-w-full mt-2 h-auto max-h-96"
-                      />
-                    );
-                  }
-                }
-                
-                // Handle reasoning parts (thinking/reasoning from the model)
-                if (part.type === "reasoning" && "text" in part && part.text) {
-                  return (
-                    <p key={i} className="whitespace-pre-wrap text-zinc-400 italic text-sm">
-                      {part.text}
-                    </p>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          </div>
-        ))}
+      {/* Event Drawer */}
+      <EventDrawer
+        event={gameState.currentEvent}
+        visible={showDrawer}
+        onChoose={handleChoice}
+        disabled={choosing}
+      />
 
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-zinc-800 text-zinc-400 rounded-2xl px-4 py-3">
-              Thinking...
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Loading Overlay */}
+      <LoadingOverlay visible={showLoading} />
 
-      {/* Image Preview */}
-      {filesWithPreview.length > 0 && (
-        <div className="px-4 py-2 border-t border-zinc-800 bg-zinc-900">
-          <div className="flex gap-2 overflow-x-auto">
-            {filesWithPreview.map(({ file, previewUrl }, index) => (
-              <div key={index} className="relative shrink-0">
-                {isDisplayableImage(file.type) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={previewUrl}
-                    alt={`Preview ${index + 1}`}
-                    className="w-20 h-20 object-cover rounded-lg"
-                  />
-                ) : (
-                  // Fallback for HEIC and other unsupported formats
-                  <div className="w-20 h-20 bg-zinc-700 rounded-lg flex flex-col items-center justify-center text-zinc-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                      <circle cx="9" cy="9" r="2"/>
-                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-                    </svg>
-                    <span className="text-[10px] mt-1">{file.type.split("/")[1].toUpperCase()}</span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFile(index)}
-                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600"
-                >
-                  ×
-                </button>
+      {/* Result Card (outcome of player's choice) */}
+      <ResultCard
+        text={gameState.outcomeText ?? ""}
+        visible={showOutcome}
+        onContinue={handleNextTurn}
+      />
+
+      {/* Game Over Screen */}
+      {gameState.gameOver && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-md">
+          <Card className="max-w-sm bg-black/50 backdrop-blur-2xl border-white/[0.08] text-center gap-3 py-6">
+            <CardContent className="px-6 py-0 space-y-4">
+              <Badge variant="secondary" className="bg-white/[0.08] text-white/50 border-white/[0.06] text-[12px] uppercase tracking-wider">
+                {gameState.stats.population <= 0 ? "Fallen" : "Complete"}
+              </Badge>
+              <h1 className="text-2xl font-semibold text-white/95 tracking-tight">
+                {gameState.stats.population <= 0
+                  ? "Your Civilization Has Fallen"
+                  : "Your Civilization Has Reached Its Destiny"}
+              </h1>
+              <p className="text-white/30 text-[15px]">
+                {formatYear(gameState.year)} &middot; {gameState.turn} turns
+              </p>
+              <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 text-left text-[15px] text-white/50 space-y-1.5">
+                <p>Population: <span className="text-white/80">{gameState.stats.population.toLocaleString()}</span></p>
+                <p>Turns survived: <span className="text-white/80">{gameState.turn}</span></p>
+                <p>Decisions made: <span className="text-white/80">{gameState.history.length}</span></p>
               </div>
-            ))}
-          </div>
+              <Button onClick={handleNewGame} size="sm">
+                Play Again
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-zinc-800">
-        <div className="flex gap-3 items-center">
-          {/* Hidden file input */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            multiple
-            className="hidden"
-          />
-          
-          {/* Upload button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            className="p-3 rounded-xl bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Upload images"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-              <circle cx="9" cy="9" r="2"/>
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-            </svg>
-          </button>
-
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything or describe a home to generate..."
-            className="flex-1 p-3 rounded-xl bg-zinc-800 text-white border border-zinc-700 focus:outline-none focus:border-zinc-500"
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || (!input.trim() && filesWithPreview.length === 0)}
-            className="px-6 py-3 bg-white text-black font-medium rounded-xl hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Send
-          </button>
+      {/* Idle state: Continue button */}
+      {gameState.phase === "idle" && !gameState.gameOver && gameState.currentImage && (
+        <div className="absolute bottom-16 left-0 right-0 z-20 flex justify-center">
+          <Button onClick={handleNextTurn} size="sm">
+            Continue
+          </Button>
         </div>
-      </form>
+      )}
+
+      {/* New Game button (top right) */}
+      {gameState.currentImage && !gameState.gameOver && (
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={handleNewGame}
+          className="absolute top-4 right-4 z-20 bg-black/30 backdrop-blur-xl border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-black/50"
+        >
+          New Game
+        </Button>
+      )}
     </div>
   );
 }
