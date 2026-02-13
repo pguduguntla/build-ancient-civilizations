@@ -4,15 +4,32 @@ import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TextEffect } from "@/components/motion-primitives/text-effect";
+import type { Stats } from "@/app/lib/game-state";
 
 type ResultCardProps = {
   text: string;
   visible: boolean;
   onContinue: () => void;
+  statDeltas?: Partial<Stats>;
 };
 
-export function ResultCard({ text, visible, onContinue }: ResultCardProps) {
+const STAT_LABELS: Record<keyof Stats, string> = {
+  population: "Pop",
+  gold: "Gold",
+  food: "Food",
+  defense: "Defense",
+  culture: "Culture",
+};
+
+function formatDelta(value: number, key: keyof Stats): string {
+  if (key === "population") return value >= 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
+  return value >= 0 ? `+${value}` : `${value}`;
+}
+
+export function ResultCard({ text, visible, onContinue, statDeltas }: ResultCardProps) {
   if (!visible || !text) return null;
+
+  const hasDeltas = statDeltas && Object.keys(statDeltas).length > 0;
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none">
@@ -35,6 +52,23 @@ export function ResultCard({ text, visible, onContinue }: ResultCardProps) {
             Outcome
           </Badge>
         </motion.div>
+
+        {hasDeltas && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+            className="flex flex-wrap gap-x-3 gap-y-0.5 mb-3 text-[13px]"
+          >
+            {(Object.entries(statDeltas) as [keyof Stats, number][]).map(([key, value]) =>
+              value !== 0 ? (
+                <span key={key} className={value > 0 ? "text-emerald-400/90" : "text-red-400/90"}>
+                  {STAT_LABELS[key]} {formatDelta(value, key)}
+                </span>
+              ) : null
+            )}
+          </motion.div>
+        )}
 
         <TextEffect
           preset="fade-in-blur"

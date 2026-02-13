@@ -31,7 +31,17 @@ export type HistoryEntry = {
   imageMimeType: string;
 };
 
+export type CivilizationId = "rome" | "india" | "egypt";
+
+/** Base image paths for the civilization picker and initial game image. Add rome.jpg, india.jpg, egypt.jpg (or .png) to public/civilizations/. */
+export const CIVILIZATION_IMAGE_PATHS: Record<CivilizationId, { jpg: string; png: string }> = {
+  rome: { jpg: "/civilizations/rome.jpg", png: "/civilizations/rome.png" },
+  india: { jpg: "/civilizations/india.jpg", png: "/civilizations/india.png" },
+  egypt: { jpg: "/civilizations/egypt.jpg", png: "/civilizations/egypt.png" },
+};
+
 export type GameState = {
+  civilization: CivilizationId;
   turn: number;
   year: number;
   stats: Stats;
@@ -43,20 +53,24 @@ export type GameState = {
   phase: "loading" | "event" | "processing" | "outcome" | "idle";
   outcomeText: string | null;
   gameOver: boolean;
+  /** Deltas from the last choice (for outcome UI). Not persisted. */
+  lastChoiceStatDeltas?: Partial<Stats> | null;
 };
 
-const STORAGE_KEY = "ancient-city-builder-state";
+const STATE_KEY_PREFIX = "ancient-city-builder-state-";
+const GAME_IDS_KEY = "ancient-city-builder-game-ids";
 
 export const INITIAL_STATS: Stats = {
-  population: 200,
+  population: 1500,
   gold: 3,
   food: 3,
   defense: 1,
   culture: 1,
 };
 
-export function createInitialState(): GameState {
+export function createInitialState(civilization: CivilizationId = "rome"): GameState {
   return {
+    civilization,
     turn: 0,
     year: -1000,
     stats: { ...INITIAL_STATS },
@@ -71,31 +85,91 @@ export function createInitialState(): GameState {
   };
 }
 
-export function saveGameState(state: GameState): void {
+function getStateKey(gameId: string): string {
+  return `${STATE_KEY_PREFIX}${gameId}`;
+}
+
+export function getGameIds(): string[] {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const raw = localStorage.getItem(GAME_IDS_KEY);
+    if (!raw) return [];
+    const ids = JSON.parse(raw) as unknown;
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function addGameId(gameId: string): void {
+  const ids = getGameIds();
+  if (ids.includes(gameId)) return;
+  try {
+    localStorage.setItem(GAME_IDS_KEY, JSON.stringify([...ids, gameId]));
+  } catch {
+    // ignore
+  }
+}
+
+function removeGameId(gameId: string): void {
+  const ids = getGameIds().filter((id) => id !== gameId);
+  try {
+    if (ids.length) localStorage.setItem(GAME_IDS_KEY, JSON.stringify(ids));
+    else localStorage.removeItem(GAME_IDS_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function saveGameState(state: GameState, gameId: string): void {
+  try {
+    const key = getStateKey(gameId);
+    localStorage.setItem(key, JSON.stringify(state));
+    addGameId(gameId);
   } catch {
     // localStorage might be full or unavailable
   }
 }
 
-export function loadGameState(): GameState | null {
+export function loadGameState(gameId: string): GameState | null {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    const saved = localStorage.getItem(getStateKey(gameId));
+    if (!saved) return null;
+    const parsed = JSON.parse(saved) as Partial<GameState>;
+    if (!parsed || typeof parsed.turn !== "number") return null;
+    return {
+      ...parsed,
+      civilization: (parsed.civilization === "rome" || parsed.civilization === "india" || parsed.civilization === "egypt")
+        ? parsed.civilization
+        : "rome",
+    } as GameState;
   } catch {
-    // corrupted data
+    return null;
   }
-  return null;
 }
 
-export function clearGameState(): void {
-  localStorage.removeItem(STORAGE_KEY);
+export function clearGameState(gameId: string): void {
+  localStorage.removeItem(getStateKey(gameId));
+  removeGameId(gameId);
 }
+
+/** Max fraction of population that can be lost in a single choice (unless catastrophic). */
+const MAX_POPULATION_LOSS_FRACTION = 0.15;
 
 export function applyChoiceEffects(stats: Stats, effects: Partial<Stats>): Stats {
+  const rawPopChange = effects.population ?? 0;
+  const newPopulation =
+    rawPopChange >= 0
+      ? stats.population + rawPopChange
+      : Math.max(
+          0,
+          stats.population - Math.min(
+            Math.abs(rawPopChange),
+            Math.max(50, Math.ceil(stats.population * MAX_POPULATION_LOSS_FRACTION))
+          )
+        );
+
   return {
-    population: Math.max(0, stats.population + (effects.population ?? 0)),
+    population: newPopulation,
     gold: Math.max(0, Math.min(5, stats.gold + (effects.gold ?? 0))),
     food: Math.max(0, Math.min(5, stats.food + (effects.food ?? 0))),
     defense: Math.max(0, Math.min(5, stats.defense + (effects.defense ?? 0))),
@@ -108,9 +182,16 @@ export function formatYear(year: number): string {
   return `${year} CE`;
 }
 
+const CIVILIZATION_CONTEXT: Record<CivilizationId, string> = {
+  rome: "Ancient Roman",
+  india: "Ancient Indian",
+  egypt: "Ancient Egyptian",
+};
+
 export function buildCityDescription(state: GameState, choiceLabel?: string): string {
-  const { stats, year, history } = state;
-  let desc = `An ancient city settlement in ${formatYear(year)} with approximately ${stats.population} inhabitants.`;
+  const { stats, year, history, civilization } = state;
+  const civName = CIVILIZATION_CONTEXT[civilization];
+  let desc = `A ${civName} city settlement in ${formatYear(year)} with approximately ${stats.population} inhabitants.`;
 
   if (stats.population < 500) desc += " A small humble village with basic huts and farmland.";
   else if (stats.population < 2000) desc += " A growing town with stone buildings, a marketplace, and surrounding farms.";
