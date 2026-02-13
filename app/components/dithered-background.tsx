@@ -65,7 +65,13 @@ export function DitheredBackground({ imageUrl = "/civilizations/rome.png", onRea
       ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, -sx, -sy, sw, sh);
 
-      ditherImage(ctx, w, h, DEFAULT_OPTIONS);
+      ditherImage(ctx, w, h, {
+        ...DEFAULT_OPTIONS,
+        gradient: {
+          ...DEFAULT_OPTIONS.gradient,
+          points: DEFAULT_OPTIONS.gradient.points.map((p) => ({ ...p })),
+        },
+      });
       setReady(true);
       onReady?.();
     };
