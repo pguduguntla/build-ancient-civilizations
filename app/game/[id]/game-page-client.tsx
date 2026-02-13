@@ -129,6 +129,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
   const [choosing, setChoosing] = useState(false);
   const [scrubEntry, setScrubEntry] = useState<HistoryEntry | null>(null);
   const [loadingMessages, setLoadingMessages] = useState<string[] | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const initRef = useRef(false);
 
   const goHome = useCallback(() => {
@@ -164,6 +165,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
   }, [initialized]);
 
   const startNewGame = useCallback(async () => {
+    setErrorMessage(null);
     const state = createInitialState(initialCivilization ?? "rome");
 
     try {
@@ -190,12 +192,14 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
       saveGameState(newState, gameId);
     } catch (error) {
       console.error("Failed to start game:", error);
+      setErrorMessage("Something went wrong");
       setGameState((prev) => (prev ? { ...prev, phase: "idle" } : prev));
       try {
         const event = await fetchEvent(state);
         setGameState((prev) =>
           prev ? { ...prev, currentEvent: event, phase: "event" } : prev
         );
+        setErrorMessage(null);
       } catch {
         console.error("Failed to start game completely");
       }
@@ -306,6 +310,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
   const handleNextTurn = useCallback(async () => {
     if (!gameState || choosing) return;
     setChoosing(true);
+    setErrorMessage(null);
 
     const loadingState: GameState = { ...gameState, phase: "loading" };
     setGameState(loadingState);
@@ -345,6 +350,7 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
       setGameState(newState);
       saveGameState(newState, gameId);
     } catch {
+      setErrorMessage("Something went wrong");
       setGameState({ ...gameState, phase: "idle" });
     } finally {
       setChoosing(false);
@@ -446,6 +452,14 @@ export function GamePageClient({ gameId, initialCivilization }: GamePageClientPr
               </Button>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="absolute bottom-20 left-4 right-4 z-20 flex justify-center md:left-0 md:right-0">
+          <Badge variant="destructive" className="text-xs font-normal px-3 py-1.5 bg-red-500/90 text-white border-0">
+            {errorMessage}
+          </Badge>
         </div>
       )}
 
